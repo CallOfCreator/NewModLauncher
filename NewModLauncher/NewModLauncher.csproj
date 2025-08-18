@@ -1,5 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <VersionPrefix>1.0.2</VersionPrefix>
     <OutputType>WinExe</OutputType>
     <Authors>CallOfCreator</Authors>
     <TargetFramework>net8.0</TargetFramework>
@@ -34,3 +35,4 @@
     <EmbeddedResource Include="Assets\**" />
   </ItemGroup>
 </Project>
+
