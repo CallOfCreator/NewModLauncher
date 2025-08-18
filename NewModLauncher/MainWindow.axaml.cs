@@ -92,7 +92,7 @@ namespace NewModLauncher
                     StatusIcon.Foreground = Brushes.LimeGreen;
                     StatusIconBorder.Background = new SolidColorBrush(Color.Parse("#3B4255"));
                     StatusText.Text = "Mod Installed Successfully, Ready!";
-                    StatusText.Foreground = Brushes.Green;
+                    StatusText.Foreground = Brushes.LimeGreen;
                 });
             }
 
@@ -142,9 +142,8 @@ namespace NewModLauncher
         }
         public async Task UpdateVersionInformationAsync()
         {
-            string launcherVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "Unknown";
+            string launcherVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "";
             _settingsService.LauncherVersion = launcherVersion;
-
 
             bool IsNewModPresent = _versionCheckService.IsNewModPresent(_amongUsPath, out var newModVersion);
             _settingsService.ModVersion = newModVersion;
@@ -202,6 +201,7 @@ namespace NewModLauncher
         }
         public async Task CheckUpdatesAsync()
         {
+            if (_isUpdating || _updateDialogShown) return;
 
             StatusText.Text = "Checking for updates...";
             StatusSubText.Text = "Verifying mod version";
@@ -215,178 +215,264 @@ namespace NewModLauncher
             {
                 string latestVersion = await _modUpdateService.FetchLatestModVersionAsync();
 
-                var notification = new Notification()
+                if (!_updateDialogShown)
                 {
-                    Title = "NewMod Update 🚀",
-                    Message = $"Heads up! NewMod v{latestVersion} is ready to install!\n🔥 Experience the latest features & fixes.\n\nClick this notification to download now! ⬇️",
-                    OnClick = async () =>
-                    {
-                        await UpdateNewModAsync();
-                    }
-                };
+                    _updateDialogShown = true;
 
-                if (!_updateDialogShown && !_isUpdating)
-                {
                     StatusText.Text = "Updates available!";
                     StatusSubText.Text = "New versions detected";
-                    StatusIcon.Text = "↻"; // Update icon
+                    StatusIcon.Text = "↻";
                     StatusIcon.Foreground = new SolidColorBrush(Color.Parse("#FFCC00"));
                     StatusIconBorder.Background = new SolidColorBrush(Color.Parse("#3D3522"));
-                    _updateDialogShown = true;
-                    await ShowMessageAsync("Updates Available", "A new version of NewMod is available! 🚀\nPress Download Now in the notification or here.", true, showUpdateButton: true);
+
+                    await ShowMessageAsync(
+                        "Update Available",
+                        $"NewMod {latestVersion} is available\nChoose how you want to install in the next step",
+                        isSuccess: true
+                    );
+
+                    string installChoice = await ShowInstallTypeDialogAsync();
+
+                    if (installChoice == "zip" || installChoice == "dll")
+                    {
+                        _isUpdating = true;
+                        try
+                        {
+                            if (installChoice == "zip")
+                                await UpdateNewModZipAsync();
+                            else if (installChoice == "dll")
+                                await UpdateNewModDllAsync();
+
+                            await UpdateVersionInformationAsync();
+                        }
+                        finally
+                        {
+                            _isUpdating = false;
+                            _updateDialogShown = false;
+                        }
+                    }
+                    else
+                    {
+                        StatusText.Text = "Update canceled.";
+                        StatusText.Foreground = Brushes.Red;
+                        StatusIcon.Foreground = Brushes.Red;
+                        LaunchGameButton.IsEnabled = false;
+                        StatusIconBorder.Background = new SolidColorBrush(Color.Parse("#3D3522"));
+                        _updateDialogShown = false;
+                    }
                 }
             }
             else
             {
                 StatusText.Text = "NewMod is up-to-date.";
                 StatusSubText.Text = "All components are up-to-date";
-                StatusIcon.Text = "✓"; // Check mark
+                StatusIcon.Text = "✓";
                 StatusText.Foreground = Brushes.LimeGreen;
                 StatusIcon.Foreground = Brushes.LimeGreen;
                 StatusIconBorder.Background = new SolidColorBrush(Color.Parse("#3B4255"));
             }
+
             LaunchGameButton.IsEnabled = true;
         }
-        public async Task UpdateNewModAsync()
+        public async Task UpdateNewModZipAsync()
         {
-            if (_isUpdating) return;
-
-            _isUpdating = true;
-            _updateDialogShown = false;
-
-            string pluginDir = Path.Combine(_settingsService.AmongUsPath, "BepInEx", "plugins");
-            string file = Path.Combine(pluginDir, "NewMod.dll");
-            string oldFile = Path.Combine(pluginDir, "NewMod.dll.old");
-
-
             var (hasZip, zipUrl, dllUrl) = await _modUpdateService.GetDownloadUrlsAsync();
-            string downloadUrl = hasZip ? zipUrl : dllUrl;
-            bool isZip = hasZip;
-            string tempFile = Path.Combine(Path.GetTempPath(), isZip ? "NewMod_temp.zip" : "NewMod_temp.dll");
+            string tempFile = Path.Combine(Path.GetTempPath(), "NewMod_temp.zip");
+            string pluginDir = Path.Combine(_settingsService.AmongUsPath, "BepInEx", "plugins");
 
             try
             {
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    StatusText.Text = "Downloading update...";
-                    StatusText.Foreground = Brushes.Yellow;
+                    StatusText.Text = "Downloading NewMod.zip...";
                     DownloadProgressBar.IsVisible = true;
                     DownloadProgressBar.DownloadItemName = "NewMod.zip";
+                    DownloadProgressBar.InvalidateVisual();
                     DownloadProgressBar.Value = 0;
                     DownloadProgressBar.Maximum = 100;
                     DownloadProgressBar.ShowDownloadProgressText = true;
-                    DownloadProgressBar.InvalidateVisual();
                 });
 
                 using var client = new HttpClient();
                 client.DefaultRequestHeaders.Add("User-Agent", "NewModLauncher");
-                var response = await client.GetAsync(downloadUrl);
+                using var response = await client.GetAsync(zipUrl);
 
-                if (response.IsSuccessStatusCode)
+                if (!response.IsSuccessStatusCode)
                 {
-                    long totalBytes = response.Content.Headers.ContentLength ?? -1;
-                    long totalRead = 0;
-                    byte[] buffer = new byte[8192];
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        StatusText.Text = $"Failed to download DLL (HTTP {(int)response.StatusCode}).";
+                        StatusText.Foreground = Brushes.Red;
+                    });
+                    return;
+                }
 
-                    using var stream = await response.Content.ReadAsStreamAsync();
-                    using var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None);
+                long totalBytes = response.Content.Headers.ContentLength ?? -1;
+                long totalRead = 0;
+                byte[] buffer = new byte[8192];
 
+                using var stream = await response.Content.ReadAsStreamAsync();
+                using (var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
                     int read;
                     while ((read = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
                     {
-                        await fileStream.WriteAsync(buffer, 0, read);
+                        await fileStream.WriteAsync(buffer.AsMemory(0, read));
                         totalRead += read;
                         if (totalBytes > 0)
                         {
-                            double progress = ((double)totalRead / totalBytes) * 100;
+                            double progress = (double)totalRead / totalBytes * 100;
                             await Dispatcher.UIThread.InvokeAsync(() =>
                             {
                                 DownloadProgressBar.Value = progress;
-                                DownloadProgressBar.InvalidateVisual();
-                                StatusText.Text = $"Downloading... {progress:0.0}%";
+                                StatusText.Text = $"Downloading NewMod.zip: {progress:0.0}%";
                             });
                         }
                     }
-
-                    if (isZip)
-                    {
-                        using var archive = ZipFile.OpenRead(tempFile);
-                        foreach (var entry in archive.Entries)
-                        {
-                            if (entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-                            {
-                                string destPath = Path.Combine(pluginDir, entry.Name);
-
-                                if (File.Exists(destPath))
-                                {
-                                    string backupPath = destPath + ".old";
-                                    if (File.Exists(backupPath))
-                                        File.Delete(backupPath);
-                                    File.Move(destPath, backupPath);
-                                }
-                                entry.ExtractToFile(destPath, true);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        if (File.Exists(file))
-                        {
-                            if (File.Exists(oldFile))
-                            {
-                                File.Delete(oldFile);
-                            }
-                            File.Move(file, oldFile);
-                        }
-                        File.Move(tempFile, file);
-                    }
-
-                    await Dispatcher.UIThread.InvokeAsync(() =>
-                    {
-                        StatusText.Text = "Update downloaded successfully!";
-                        StatusText.Foreground = Brushes.Green;
-                        LaunchGameButton.IsEnabled = true;
-                    });
                 }
-                else
+                using (var archive = ZipFile.OpenRead(tempFile))
                 {
-                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    foreach (var entry in archive.Entries)
                     {
-                        StatusText.Text = "Failed to download update.";
-                        StatusText.Foreground = Brushes.Red;
-                    });
+                        if (!entry.FullName.StartsWith("NewMod/BepInEx/plugins/", StringComparison.OrdinalIgnoreCase)) continue;
+
+                        if (string.IsNullOrEmpty(entry.Name)) continue;
+
+                        string relativePath = entry.FullName["NewMod/".Length..];
+
+                        string destPath = Path.Combine(_settingsService.AmongUsPath, relativePath);
+
+                        Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+
+                        if (File.Exists(destPath))
+                        {
+                            string backupPath = destPath + ".old";
+                            if (File.Exists(backupPath))
+                                File.Delete(backupPath);
+                            File.Move(destPath, backupPath);
+                        }
+
+                        entry.ExtractToFile(destPath, true);
+                    }
                 }
-            }
-            catch (IOException ex)
-            {
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    StatusText.Text = "Error: File in use.";
-                    StatusText.Foreground = Brushes.Red;
+                    StatusText.Text = "ZIP Installation complete!";
+                    StatusText.Foreground = Brushes.Green;
+                    LaunchGameButton.IsEnabled = true;
                 });
+                await UpdateVersionInformationAsync();
             }
             catch (Exception e)
             {
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    StatusText.Text = "An unexpected error occurred.";
+                    StatusText.Text = "Error occurred.";
                     StatusText.Foreground = Brushes.Red;
                 });
                 Logger.Error(e.ToString());
             }
             finally
             {
+                DownloadProgressBar.IsVisible = false;
+                DownloadProgressBar.Value = 0;
+                DownloadProgressBar.ShowDownloadProgressText = false;
+                DownloadProgressBar.DownloadItemName = "";
+            }
+        }
+        public async Task UpdateNewModDllAsync()
+        {
+            var (_, _, dllUrl) = await _modUpdateService.GetDownloadUrlsAsync();
+            string tempFile = Path.Combine(Path.GetTempPath(), "NewMod_temp.dll");
+            string pluginDir = Path.Combine(_settingsService.AmongUsPath, "BepInEx", "plugins");
+            string destPath = Path.Combine(pluginDir, "NewMod.dll");
+
+            try
+            {
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    DownloadProgressBar.IsVisible = false;
+                    StatusText.Text = "Downloading NewMod.dll...";
+                    DownloadProgressBar.IsVisible = true;
+                    DownloadProgressBar.DownloadItemName = "NewMod.dll";
                     DownloadProgressBar.Value = 0;
-                    DownloadProgressBar.ShowDownloadProgressText = false;
-                    DownloadProgressBar.DownloadItemName = "";
-                    _isUpdating = false;
-                    _updateDialogShown = false;
+                    DownloadProgressBar.Maximum = 100;
+                    DownloadProgressBar.ShowDownloadProgressText = true;
                 });
+
+                using var client = new HttpClient();
+                client.DefaultRequestHeaders.Add("User-Agent", "NewModLauncher");
+                using (var response = await client.GetAsync(dllUrl, HttpCompletionOption.ResponseHeadersRead))
+                {
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        await Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            StatusText.Text = $"Failed to download DLL (HTTP {(int)response.StatusCode}).";
+                            StatusText.Foreground = Brushes.Red;
+                        });
+                        return;
+                    }
+
+                    long total = response.Content.Headers.ContentLength ?? -1;
+                    long readTotal = 0;
+                    byte[] buffer = new byte[8192];
+
+                    using (var inStream = await response.Content.ReadAsStreamAsync())
+                    using (var outStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
+                    {
+                        int read;
+                        while ((read = await inStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                        {
+                            await outStream.WriteAsync(buffer, 0, read);
+                            readTotal += read;
+
+                            if (total > 0)
+                            {
+                                double p = (double)readTotal / total * 100;
+                                await Dispatcher.UIThread.InvokeAsync(() =>
+                                {
+                                    DownloadProgressBar.Value = p;
+                                    StatusText.Text = $"Downloading NewMod.dll: {p:0.0}%";
+                                });
+                            }
+                        }
+                        await outStream.FlushAsync();
+                    }
+                }
+                if (File.Exists(destPath))
+                {
+                    string backupPath = destPath + ".old";
+                    if (File.Exists(backupPath))
+                        File.Delete(backupPath);
+                    File.Move(destPath, backupPath);
+                }
+                File.Copy(tempFile, destPath, overwrite: true);
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    StatusText.Text = "DLL Update complete!";
+                    StatusText.Foreground = Brushes.Green;
+                    LaunchGameButton.IsEnabled = true;
+                });
+                await UpdateVersionInformationAsync();
             }
-            await UpdateVersionInformationAsync();
+            catch (Exception e)
+            {
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    StatusText.Text = "Error occurred.";
+                    StatusText.Foreground = Brushes.Red;
+                });
+                Logger.Error(e.ToString());
+            }
+            finally
+            {
+                DownloadProgressBar.IsVisible = false;
+                DownloadProgressBar.Value = 0;
+                DownloadProgressBar.ShowDownloadProgressText = false;
+                DownloadProgressBar.DownloadItemName = "";
+                if (File.Exists(tempFile)) File.Delete(tempFile);
+            }
         }
         public async Task CheckAndUpdateLauncherAsync()
         {
@@ -523,7 +609,7 @@ namespace NewModLauncher
             WindowState = WindowState.Minimized;
 
         }
-        public async Task ShowMessageAsync(string title, string message, bool isSuccess, bool showUpdateButton = false, IBrush? customBrush = null)
+        public async Task ShowMessageAsync(string title, string message, bool isSuccess, IBrush? customBrush = null)
         {
             var dialog = new Window
             {
@@ -572,38 +658,6 @@ namespace NewModLauncher
 
             stackPanel.Children.Add(textBlock);
 
-            if (showUpdateButton)
-            {
-                string buttonText = "Update Now";
-                Action buttonAction = async () =>
-                {
-                    dialog.Close();
-                    await UpdateNewModAsync();
-                };
-
-
-                if (customBrush != null && customBrush.Equals(Brushes.Orange))
-                {
-                    buttonText = "Install Anyway";
-                    buttonAction = () => dialog.Close();
-                }
-
-                var actionButton = new Button
-                {
-                    Content = buttonText,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    Width = 140,
-                    Height = 40,
-                    Background = new SolidColorBrush(Color.Parse("#2D8A40")),
-                    Foreground = Brushes.White,
-                    CornerRadius = new CornerRadius(4),
-                    FontWeight = FontWeight.SemiBold
-                };
-
-                actionButton.Click += (_, __) => buttonAction();
-                stackPanel.Children.Add(actionButton);
-            }
-
             var okButton = new Button
             {
                 Content = "OK",
@@ -640,7 +694,7 @@ namespace NewModLauncher
             var dialog = new Window
             {
                 Title = title,
-                Width = 400,
+                Width = 500,
                 Height = 200,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Background = new SolidColorBrush(Color.Parse("#1A1A1A"))
@@ -748,6 +802,121 @@ namespace NewModLauncher
             {
 
                 Logger.Log("ERROR", $"Error showing dialog: {ex.Message}");
+            }
+
+            return result;
+        }
+        public async Task<string> ShowInstallTypeDialogAsync()
+        {
+            string result = "cancel";
+
+            var dialog = new Window
+            {
+                Title = "Choose Install Type",
+                Width = 520,
+                Height = 260,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Background = new SolidColorBrush(Color.Parse("#0bd4baff"))
+            };
+
+            var mainBorder = new Border
+            {
+                Background = new SolidColorBrush(Color.Parse("#0c59bdff")),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(20)
+            };
+
+            var stackPanel = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                Spacing = 15,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            var textBlock = new TextBlock
+            {
+                Text = "Choose your install type:\n1. Install ZIP\n2. Update DLL",
+                Foreground = Brushes.White,
+                TextWrapping = TextWrapping.Wrap,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                FontSize = 14,
+                FontWeight = FontWeight.SemiBold,
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            stackPanel.Children.Add(textBlock);
+
+            var buttonPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 10,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+
+            var installZipButton = new Button
+            {
+                Content = "Install ZIP",
+                Width = 150,
+                Height = 40,
+                Background = new SolidColorBrush(Color.Parse("#2D8A40")),
+                Foreground = Brushes.White,
+                CornerRadius = new CornerRadius(4),
+                FontWeight = FontWeight.SemiBold
+            };
+            installZipButton.Click += (_, __) =>
+            {
+                result = "zip";
+                dialog.Close();
+            };
+
+            var updateDllButton = new Button
+            {
+                Content = "Update DLL",
+                Width = 150,
+                Height = 40,
+                Background = new SolidColorBrush(Color.Parse("#D68C00")),
+                Foreground = Brushes.White,
+                CornerRadius = new CornerRadius(4),
+                FontWeight = FontWeight.SemiBold
+            };
+            updateDllButton.Click += (_, __) =>
+            {
+                result = "dll";
+                dialog.Close();
+            };
+
+            var cancelButton = new Button
+            {
+                Content = "Cancel",
+                Width = 100,
+                Height = 40,
+                Background = new SolidColorBrush(Color.Parse("#444444")),
+                Foreground = Brushes.White,
+                CornerRadius = new CornerRadius(4),
+                FontWeight = FontWeight.SemiBold
+            };
+            cancelButton.Click += (_, __) =>
+            {
+                result = "cancel";
+                dialog.Close();
+            };
+
+            buttonPanel.Children.Add(installZipButton);
+            buttonPanel.Children.Add(updateDllButton);
+            buttonPanel.Children.Add(cancelButton);
+
+            stackPanel.Children.Add(buttonPanel);
+            mainBorder.Child = stackPanel;
+            dialog.Content = mainBorder;
+
+            try
+            {
+                await dialog.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("ERROR", $"Error showing dialog: {ex.Message}");
+                result = "cancel";
             }
 
             return result;
@@ -1005,7 +1174,7 @@ namespace NewModLauncher
                         _gamePathService.GetAmongUsVersion(_amongUsPath);
 
                         viewModel.CheckModInstallStates(files);
-                        viewModel.CheckForModUpdatesAsync();
+                        _ = viewModel.CheckForModUpdatesAsync();
                     }
                 }
             }

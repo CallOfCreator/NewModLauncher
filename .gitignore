@@ -1,7 +1,6 @@
 # Compiled output
 **/bin
 **/obj
-app.manifest
 *.dll
 *.pdb
 *.user

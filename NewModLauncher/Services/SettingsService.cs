@@ -89,66 +89,66 @@ namespace NewModLauncher.Services
 
         public string? GameVersion
         {
-            get => _cachedConfig["GameVersion"]?.GetValue<string>();
+            get => _cachedConfig[nameof(GameVersion)]?.GetValue<string>();
             set
             {
-                _cachedConfig["GameVersion"] = value;
+                _cachedConfig[nameof(GameVersion)] = value;
                 Save();
             }
         }
 
         public string LauncherVersion
         {
-            get => _cachedConfig["LauncherVersion"]?.GetValue<string>() ?? "1.0.0";
+            get => _cachedConfig[nameof(LauncherVersion)]?.GetValue<string>() ?? "1.0.0";
             set
             {
-                _cachedConfig["LauncherVersion"] = value;
+                _cachedConfig[nameof(LauncherVersion)] = value;
                 Save();
             }
         }
 
         public string ModVersion
         {
-            get => _cachedConfig["ModVersion"]?.GetValue<string>() ?? "";
+            get => _cachedConfig[nameof(ModVersion)]?.GetValue<string>() ?? "";
             set
             {
-                _cachedConfig["ModVersion"] = value;
+                _cachedConfig[nameof(ModVersion)] = value;
                 Save();
             }
         }
         public string GradientType
         {
-            get => _cachedConfig["GradientType"]?.GetValue<string>() ?? "None";
+            get => _cachedConfig[nameof(GradientType)]?.GetValue<string>() ?? "None";
             set
             {
-                _cachedConfig["GradientType"] = value;
+                _cachedConfig[nameof(GradientType)] = value;
                 Save();
             }
         }
         public string GradientStartColor
         {
-            get => _cachedConfig["GradientStartColor"]?.GetValue<string>() ?? "#FF000000";
+            get => _cachedConfig[nameof(GradientStartColor)]?.GetValue<string>() ?? "#FF000000";
             set
             {
-                _cachedConfig["GradientStartColor"] = value;
+                _cachedConfig[nameof(GradientStartColor)] = value;
                 Save();
             }
         }
         public string GradientEndColor
         {
-            get => _cachedConfig["GradientEndColor"]?.GetValue<string>() ?? "#FF000000";
+            get => _cachedConfig[nameof(GradientEndColor)]?.GetValue<string>() ?? "#FF000000";
             set
             {
-                _cachedConfig["GradientEndColor"] = value;
+                _cachedConfig[nameof(GradientEndColor)] = value;
                 Save();
             }
         }
         public bool NightlyBuildsEnabled
         {
-            get => _cachedConfig["NightlyBuildsEnabled"]?.GetValue<bool>() ?? false;
+            get => _cachedConfig[nameof(NightlyBuildsEnabled)]?.GetValue<bool>() ?? false;
             set
             {
-                _cachedConfig["NightlyBuildsEnabled"] = value;
+                _cachedConfig[nameof(NightlyBuildsEnabled)] = value;
                 Save();
             }
         }
@@ -158,7 +158,7 @@ namespace NewModLauncher.Services
             {
                 try
                 {
-                    var modsArray = _cachedConfig["InstalledMods"]?.AsArray();
+                    var modsArray = _cachedConfig[nameof(InstalledMods)]?.AsArray();
                     if (modsArray != null)
                     {
                         string[] mods = new string[modsArray.Count];
@@ -180,17 +180,17 @@ namespace NewModLauncher.Services
                 {
                     array.Add(mod);
                 }
-                _cachedConfig["InstalledMods"] = array;
+                _cachedConfig[nameof(InstalledMods)] = array;
                 Save();
             }
         }
 
         public bool AnimationsEnabled
         {
-            get => _cachedConfig["AnimationsEnabled"]?.GetValue<bool>() ?? true;
+            get => _cachedConfig[nameof(AnimationsEnabled)]?.GetValue<bool>() ?? true;
             set
             {
-                _cachedConfig["AnimationsEnabled"] = value;
+                _cachedConfig[nameof(AnimationsEnabled)] = value;
                 Save();
             }
         }

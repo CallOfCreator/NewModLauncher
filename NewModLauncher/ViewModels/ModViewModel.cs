@@ -17,10 +17,8 @@ namespace NewModLauncher.ViewModels
         public string Description { get; set; } = "";
         public string DownloadUrl { get; set; } = "";
         public string RepositoryUrl { get; set; } = "";
-        public string SupportVersion { get; set; } = "";
         public string IconUrl { get; set; } = "";
         public string IconText { get; set; } = "";
-
 
         private bool _isInstalled;
         public bool IsInstalled
@@ -34,6 +32,22 @@ namespace NewModLauncher.ViewModels
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(InstallButtonText));
                     OnPropertyChanged(nameof(HasUpdate));
+                }
+            }
+        }
+
+
+        private string _supportVersion = "";
+        public string SupportVersion
+        {
+            get => _supportVersion;
+            set
+            {
+                if (_supportVersion != value)
+                {
+                    _supportVersion = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsCompatible));
                 }
             }
         }

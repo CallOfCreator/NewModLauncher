@@ -19,12 +19,17 @@
                      FontSize="18"
                      FontWeight="SemiBold"
                      Foreground="White" />
+           <Button x:Name="RefreshButton" 
+                    Grid.Column="1"
+                    Content="Refresh"
+                    Classes="secondary"
+                    Click="OnRefreshModClick"/>
 
           <TextBlock Text="These mods are compatible with NewMod and can be used together."
                      Foreground="#B0B0B0" 
                      TextWrapping="Wrap"
                      Margin="0,0,0,10" />
-
+         
           <!-- Dynamic Mods List -->
           <ItemsControl Name="ModsItemsControl" ItemsSource="{Binding Mods}">
             <ItemsControl.ItemTemplate>

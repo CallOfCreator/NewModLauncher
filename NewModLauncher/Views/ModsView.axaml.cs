@@ -104,7 +104,10 @@ namespace NewModLauncher.Views
     public partial class ModsView : UserControl
     {
         private ModsViewModel _viewModel;
-
+        private DispatcherTimer? _refreshDotsTimer;
+        private string _baseRefreshText = "Refreshing";
+        private int _dotCount = 0;
+        private object? _refreshOriginalContent;
         public ModsView()
         {
             InitializeComponent();
@@ -114,6 +117,66 @@ namespace NewModLauncher.Views
             if (this.GetVisualRoot() is MainWindow mainWindow && !string.IsNullOrEmpty(mainWindow._amongUsPath))
             {
                 mainWindow._gamePathService.GetAmongUsVersion(mainWindow._amongUsPath);
+                _ = _viewModel.CheckForModUpdatesAsync();
+            }
+        }
+        public void StartRefreshVisual()
+        {
+            _refreshOriginalContent = RefreshButton.Content;
+            RefreshButton.IsEnabled = false;
+            RefreshButton.Content = _baseRefreshText;
+
+            _dotCount = 0;
+            _refreshDotsTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(280) };
+            _refreshDotsTimer.Tick += (_, __) =>
+            {
+                _dotCount = (_dotCount + 1) % 4;
+                RefreshButton.Content = _baseRefreshText + new string('.', _dotCount);
+            };
+            _refreshDotsTimer.Start();
+        }
+
+        public void StopRefreshVisual()
+        {
+            _refreshDotsTimer?.Stop();
+            _refreshDotsTimer = null;
+            RefreshButton.IsEnabled = true;
+            RefreshButton.Content = _refreshOriginalContent ?? "Refresh";
+        }
+        public async Task RefreshModsAsync()
+        {
+            if (this.GetVisualRoot() is MainWindow window)
+            {
+                var gameVersion = window._gamePathService.GetAmongUsVersion(window._settingsService.AmongUsPath);
+                _viewModel.CurrentGameVersion = gameVersion;
+
+                await _viewModel.CheckForModUpdatesAsync();
+
+                string pluginsPath = Path.Combine(window._amongUsPath, "BepInEx", "plugins");
+                var files = Directory.GetFiles(pluginsPath, "*.dll").Select(Path.GetFileNameWithoutExtension).ToArray();
+                _viewModel.CheckModInstallStates(files);
+
+                foreach (var m in _viewModel.Mods)
+                {
+                    if (!string.IsNullOrWhiteSpace(m.LatestVersion))
+                    {
+                        m.Version = m.LatestVersion;
+                        m.NotifyUpdateChange();
+                    }
+                }
+                _viewModel.UpdateModCompatibility();
+            }
+        }
+        public async void OnRefreshModClick(object sender, RoutedEventArgs e)
+        {
+            StartRefreshVisual();
+            try
+            {
+                await RefreshModsAsync();
+            }
+            finally
+            {
+                StopRefreshVisual();
             }
         }
         private async void OnInstallModClick(object sender, RoutedEventArgs e)
