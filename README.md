@@ -4,7 +4,11 @@ Welcome to the **official launcher** for [NewMod](https://github.com/CallOfCreat
 This launcher provides a seamless way to manage, update, and launch NewMod without any hassle.
 
 ---
-
+<p align="center">
+    <a href="https://github.com/CallOfCreator/NewModLauncher/releases">
+        <img alt="Downloads" src="https://img.shields.io/github/downloads/CallOfCreator/NewModLauncher/total?style=flat&logo=github&labelColor=%23800080&color=%23ff00ff">
+    </a>
+</p>
 ### 📸 Preview
 
 > A look at the NewModLauncher:
