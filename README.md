@@ -1,4 +1,19 @@
 # 🚀 NewMod Launcher
+---
+<p align="center" style="font-size: 64px;">
+🚨 <strong>ARCHIVED</strong> 🚨
+</p>
+
+<p align="center" style="font-size: 18px;">
+NewMod Launcher will no longer receive updates or support ❌<br>
+Consider checking a superior version of this launcher: <a href="https://github.com/All-Of-Us-Mods/Starlight-PC">Starlight-PC 🌟</a>, which I’m also contributing to.
+</p>
+
+<p align="center" style="font-size: 18px;">
+✅ NewMod Launcher will still be open-source and fully usable, as always.
+</p>
+
+---
 
 Welcome to the **official launcher** for [NewMod](https://github.com/CallOfCreator/NewMod) — A simple and modern, easy-to-use launcher designed for NewMod and its compatible mods.
 This launcher provides a seamless way to manage, update, and launch NewMod without any hassle.
